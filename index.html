@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Shuttle Route: P+R Mesenich – P+R Héienhaff – Eurohub Sud</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+body{margin:0;font-family:Calibri,sans-serif}
+#map{height:65vh;width:100%}
+#info{padding:20px;max-width:1000px;margin:0 auto}
+h1{color:#1a5276;margin-bottom:5px}
+h2{color:#2e86c1;border-bottom:2px solid #2e86c1;padding-bottom:5px}
+h3{color:#1a5276}
+table{border-collapse:collapse;width:100%;margin:10px 0}
+th,td{border:1px solid #ddd;padding:8px;text-align:left}
+th{background:#2e86c1;color:#fff}
+tr:nth-child(even){background:#f2f8fd}
+.highlight{background:#d4efdf;font-weight:bold}
+.badge{display:inline-block;background:#27ae60;color:#fff;padding:2px 8px;border-radius:4px;font-size:12px}
+.badge-orange{display:inline-block;background:#e67e22;color:#fff;padding:2px 8px;border-radius:4px;font-size:12px}
+.controls{position:absolute;top:10px;right:10px;background:#fff;padding:14px;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,0.3);z-index:1000;font-size:13px}
+.controls h3{margin:0 0 8px 0;font-size:14px;border-bottom:1px solid #ddd;padding-bottom:5px}
+.controls label{display:block;margin:4px 0;cursor:pointer}
+.legend-line{display:inline-block;width:25px;height:4px;margin-right:6px;vertical-align:middle;border-radius:2px}
+.route-label{font-size:12px;font-weight:bold;background:#fff;border:1px solid #666;padding:2px 6px;border-radius:4px;white-space:nowrap}
+.source{position:absolute;bottom:30px;left:10px;background:rgba(255,255,255,0.92);padding:10px 14px;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,0.3);z-index:1000;font-size:11px;max-width:360px;line-height:1.5}
+.source b{color:#1a5276}
+.info-box{background:#eaf7ed;border:1px solid #27ae60;border-radius:6px;padding:12px;margin:10px 0}
+.warn-box{background:#fef9e7;border:1px solid #f39c12;border-radius:6px;padding:12px;margin:10px 0}
+.advantage{background:#ebf5fb;border-left:4px solid #2e86c1;padding:10px 14px;margin:10px 0;border-radius:0 6px 6px 0}
+</style>
+</head>
+<body>
+<div style="position:relative">
+<div id="map"></div>
+<div class="controls">
+  <h3>🗺️ Route Layers</h3>
+  <label><input type="checkbox" data-group="morning" checked onchange="toggle(this)"> <span class="legend-line" style="background:#27ae60"></span> 🚐 Shuttle (Morning)</label>
+  <label><input type="checkbox" data-group="evening" checked onchange="toggle(this)"> <span class="legend-line" style="background:#1e8449;border-top:2px dashed #1e8449"></span> 🚐 Shuttle (Evening)</label>
+  <label><input type="checkbox" data-group="bus306" checked onchange="toggle(this)"> <span class="legend-line" style="background:#f1c40f;border:1px solid #d4ac0d"></span> 🚌 Bus 306 (Trier → Mesenich)</label>
+  <label><input type="checkbox" data-group="bus302" checked onchange="toggle(this)"> <span class="legend-line" style="background:#8e44ad;border:1px solid #6c3483"></span> 🚌 Bus 302 (Trier → Mesenich)</label>
+</div>
+<div class="source">
+  <b>Data Sources:</b><br>
+  📍 Routing: OSRM (OpenStreetMap) + Rome2Rio<br>
+  🚗 Traffic: Google Maps (May 2026) + TomTom 2025<br>
+  🚌 Bus 306/302: RGTR timetable valid May 2026<br>
+  🚆 Trains: CFL/DB timetable valid 14 Dec 2025 – 12 Dec 2026
+</div>
+</div>
+<div id="info">
+<h1>🚌 Shuttle Route Proposal (v2)</h1>
+<p><b>P+R Mesenich/Wasserbillig → P+R Héienhaff (Airport) → Eurohub Sud Dudelange</b><br>
+New route optimized for Bus 306 or Bus 302 connection from Trier region.</p>
+
+<div class="advantage">
+<b>✅ Advantages of P+R Mesenich vs. old Sandweiler-Contern stop:</b>
+<ul style="margin:5px 0">
+<li><b>Direct bus connection</b> from Trier via Bus 306 or Bus 302 (workdays, lu-ve)</li>
+<li><b>Multiple return options</b>: Bus 306 direct, Bus + Train to Trier Pallien, Train to Trier Hbf</li>
+<li><b>More flexibility</b> compared to single train option at Sandweiler-Contern</li>
+<li><b>P+R Héienhaff kept</b> as intermediate stop for Luxembourg-based colleagues (yellow badge: cleaning, security, team members like Gerson)</li>
+</ul>
+</div>
+
+<h2>🌅 Morning Schedule</h2>
+
+<h3>🚌 Select feeder bus line and departure:</h3>
+<select id="routeSelect" onchange="populateBusSelect(); updateSchedule();" style="font-size:16px;padding:8px 12px;margin:10px 8px 10px 0;border-radius:4px;border:2px solid #2e86c1;cursor:pointer">
+  <option value="306" selected>Bus 306 — via Trier/Igel</option>
+  <option value="302">Bus 302 — via Zurlaubener Ufer / Hochschule</option>
+</select>
+<select id="busSelect" onchange="updateSchedule()" style="font-size:16px;padding:8px 12px;margin:10px 0;border-radius:4px;border:2px solid #2e86c1;cursor:pointer"></select>
+
+<div id="schedule-output"></div>
+
+<h2>💡 Why This Route Is Better</h2>
+
+<div class="advantage">
+<b>🎯 Key benefit: Team travels together</b><br>
+With Bus 306 or Bus 302 as the feeder, the <b>5 team members from Trier/Igel area</b> can be on the <b>same bus</b> every morning (306 course 3521, dep. 07:00 Trier, or 302 course 3610, dep. 07:15 Trier). This means:
+<ul style="margin:5px 0">
+<li><b>Single meeting point</b> — everyone boards the selected bus route at their nearest Trier stop and arrives together at P+R Mesenich</li>
+<li><b>No coordination needed</b> — the shuttle simply waits for the 07:30 bus arrival</li>
+<li><b>Accountability</b> — if one person is on the bus, everyone is</li>
+</ul>
+<b>Passengers:</b>
+<ul style="margin:5px 0">
+<li>📍 <b>P+R Mesenich</b> — 5 team members (from Trier via Bus 306 or Bus 302)</li>
+<li>📍 <b>P+R Héienhaff</b> — Gerson (yellow badge) + cleaning team, security, and other yellow badge colleagues who wish to join</li>
+</ul>
+</div>
+
+<div class="advantage">
+<b>🔄 More return flexibility than Sandweiler-Contern:</b><br>
+From P+R Mesenich you have <b>2 ways home</b> to Trier:
+<ol style="margin:5px 0">
+<li><b>Bus 306 or 302 direct</b> — evening options are available from Mesenich toward Trier</li>
+<li><b>Bus + Train</b> — bus to Wasserbillig Gare + train to Trier Pallien or Trier Hbf</li>
+</ol>
+Compare with Sandweiler-Contern where you had <b>only 1 option</b>: the CFL train (1-2 per hour).
+</div>
+
+<div class="warn-box">
+<b>⚖️ Trade-off (transparency):</b><br>
+The new route is <b>~17 km longer in total</b> compared to the old one (46 km vs 29 km one-way). The extra distance comes from the new Mesenich→Héienhaff segment (20 km on A1), which replaces the need for individuals to get to Luxembourg by car/train.<br><br>
+However, this is justified because:
+<ul style="margin:5px 0">
+<li>The extra distance is <b>mostly highway (A1)</b> — fast, predictable, counter-commute direction</li>
+<li>It <b>eliminates the need for individual car trips</b> to Sandweiler-Contern or Héienhaff</li>
+<li>The <b>Bus 306/302 can be covered with the Deutschlandticket</b> for commuting from Germany, reducing the need for anyone to drive to Luxembourg</li>
+<li>Net time difference is only <b>+19 minutes</b> in the morning compared to old route (48 min vs 29 min from first shuttle stop), mostly on fast highway</li>
+<li>But the <b>door-to-door time from Trier is actually comparable</b> — old route required getting to Sandweiler by train first (~44 min from Trier Hbf), new route uses Bus 306 or Bus 302 (~22-30 min from Trier to Mesenich)</li>
+</ul>
+</div>
+
+<h2>📊 Comparison: New Route vs. Old Route</h2>
+<table>
+<tr><th>Aspect</th><th>NEW (Mesenich)</th><th>OLD (Sandweiler-Contern)</th></tr>
+<tr><td>Starting point</td><td>P+R Mesenich/Wasserbillig</td><td>Gare Sandweiler-Contern</td></tr>
+<tr><td>Connection from Trier</td><td><b>Bus 306 or Bus 302 direct</b></td><td>Train CFL (1-2/hour)</td></tr>
+<tr><td>Intermediate stop</td><td>P+R Héienhaff (for Lux colleagues)</td><td>None (direct to Eurohub)</td></tr>
+<tr><td>Morning: total travel time</td><td>~48 min (Mesenich → Eurohub)</td><td>~26 min (Contern → Eurohub)</td></tr>
+<tr><td>Morning: Trier departure</td><td>~07:00 (Bus 306) / ~07:15 (Bus 302)</td><td>~07:31 (RE11 train)</td></tr>
+<tr><td>Morning: Eurohub arrival</td><td>~08:23</td><td>~08:35</td></tr>
+<tr><td>Evening: home arrival (Trier)</td><td>~18:59</td><td>~19:23 (RE11)</td></tr>
+<tr class="highlight"><td><b>Return options to Trier</b></td><td><b>Bus 306 direct + Bus 302 direct + Bus+Train</b></td><td>CFL train only (1 option)</td></tr>
+<tr><td>P+R for Lux colleagues</td><td>✅ Héienhaff (kept)</td><td>✅ Héienhaff (origin)</td></tr>
+<tr class="highlight"><td><b>Team travels together from Trier</b></td><td><b>✅ Yes (same selected bus: 306 or 302)</b></td><td>❌ No (individual trains)</td></tr>
+</table>
+
+<h3>🕐 Door-to-door comparison (Trier → Eurohub)</h3>
+<table>
+<tr><th>Step</th><th>NEW route (via Mesenich)</th><th>OLD route (via Sandweiler)</th></tr>
+<tr><td>1. Leave home (Trier)</td><td>~06:50 (walk to bus stop)</td><td>~07:20 (walk to Hbf)</td></tr>
+<tr><td>2. Transport to Luxembourg</td><td>Bus 306: 07:00→07:30 (30 min)</td><td>Train RE11: 07:31→08:15 (44 min)</td></tr>
+<tr><td>3. Transfer buffer</td><td>5 min (bus→shuttle)</td><td>2 min (train→shuttle)</td></tr>
+<tr><td>4. Shuttle to Eurohub</td><td>07:35→08:23 (48 min)</td><td>08:17→08:43 (26 min)</td></tr>
+<tr class="highlight"><td><b>Total door-to-desk</b></td><td><b>~1h33 min</b></td><td><b>~1h23 min</b></td></tr>
+<tr><td><b>Difference</b></td><td colspan="2" style="text-align:center"><b>Only ~10 min longer</b>, but with the same Bus 306 connection + more flexibility</td></tr>
+</table>
+
+<h2>🚌 Bus 306 Full Schedule (Trier → Mesenich direction)</h2>
+<p><em>Line 306: Trier (D) - Cloche d'Or - Esch/Belval. Runs lu-ve (workdays). Source: RGTR May 2026.</em></p>
+<table>
+<tr><th>Dep. Trier Theodor-Heuss-Allee</th><th>Dep. Trier Messepark P&R</th><th>Dep. Igel Kirche</th><th>Arr. Mesenich frontière</th></tr>
+<tr><td>05:00</td><td>05:08</td><td>05:17</td><td>05:28</td></tr>
+<tr><td>05:30</td><td>05:38</td><td>05:47</td><td>05:58</td></tr>
+<tr><td>06:00</td><td>06:08</td><td>06:17</td><td>06:28</td></tr>
+<tr><td>06:30</td><td>06:38</td><td>06:47</td><td>06:58</td></tr>
+<tr class="highlight"><td><b>07:00</b></td><td><b>07:08</b></td><td><b>07:18</b></td><td><b>07:30</b> ⭐</td></tr>
+<tr><td>07:30</td><td>07:38</td><td>07:48</td><td>08:00</td></tr>
+<tr><td>08:00</td><td>08:08</td><td>08:18</td><td>08:30</td></tr>
+</table>
+
+<h2>🚌 Bus 306 Return (Mesenich → Trier direction)</h2>
+<table>
+<tr><th>Dep. Mesenich frontière</th><th>Arr. Igel Kirche</th><th>Arr. Trier Messepark P&R</th><th>Arr. Trier Christophstr.</th></tr>
+<tr><td>17:01</td><td>17:11</td><td>17:19</td><td>17:29</td></tr>
+<tr><td>17:31</td><td>17:41</td><td>17:49</td><td>17:59</td></tr>
+<tr><td>18:01</td><td>18:11</td><td>18:19</td><td>18:29</td></tr>
+<tr class="highlight"><td><b>18:31</b></td><td><b>18:41</b></td><td><b>18:49</b></td><td><b>18:59</b> ⭐</td></tr>
+<tr><td>19:01</td><td>19:11</td><td>19:19</td><td>19:29</td></tr>
+<tr><td>19:31</td><td>19:41</td><td>19:49</td><td>19:59</td></tr>
+</table>
+
+<h2>🚌 Bus 302 Full Schedule (Trier → Mesenich direction)</h2>
+<p><em>Line 302: Trier (D) - PE Howald. Runs lu-ve (workdays). Source: RGTR May 2026 / 302.pdf.</em></p>
+<table>
+<tr><th>Course</th><th>Dep. Trier Theodor-Heuss-Allee</th><th>Dep. Nordallee</th><th>Dep. Zurlaubener Ufer</th><th>Dep. Hochschule</th><th>Arr. Mesenich frontière</th></tr>
+<tr><td>3250</td><td>06:15</td><td>06:16</td><td>06:17</td><td>06:19</td><td>06:33</td></tr>
+<tr><td>3430</td><td>06:45</td><td>06:46</td><td>06:49</td><td>06:52</td><td>07:07</td></tr>
+<tr class="highlight"><td><b>3610</b></td><td><b>07:15</b></td><td><b>07:16</b></td><td><b>07:19</b></td><td><b>07:22</b></td><td><b>07:37</b> ⭐</td></tr>
+<tr><td>3790</td><td>07:45</td><td>07:46</td><td>07:49</td><td>07:52</td><td>08:07</td></tr>
+<tr><td>3970</td><td>08:15</td><td>08:16</td><td>08:19</td><td>08:22</td><td>08:37</td></tr>
+</table>
+
+<h2>🚌 Bus 302 Return (Mesenich → Trier direction)</h2>
+<table>
+<tr><th>Course</th><th>Dep. Mesenich frontière</th><th>Arr. Hochschule</th><th>Arr. Zurlaubener Ufer</th><th>Arr. Nordallee</th><th>Arr. Trier Christophstr.</th></tr>
+<tr><td>7031</td><td>17:27</td><td>17:41</td><td>17:45</td><td>17:48</td><td>17:50</td></tr>
+<tr><td>7211</td><td>17:57</td><td>18:11</td><td>18:15</td><td>18:18</td><td>18:20</td></tr>
+<tr class="highlight"><td><b>7391</b></td><td><b>18:27</b></td><td><b>18:41</b></td><td><b>18:45</b></td><td><b>18:48</b></td><td><b>18:50</b> ⭐</td></tr>
+<tr><td>7571</td><td>18:57</td><td>19:11</td><td>19:15</td><td>19:18</td><td>19:20</td></tr>
+<tr><td>7751</td><td>19:22</td><td>19:34</td><td>19:37</td><td>19:38</td><td>19:40</td></tr>
+<tr><td>7931</td><td>19:52</td><td>20:04</td><td>20:07</td><td>20:08</td><td>20:10</td></tr>
+</table>
+
+<h2>📍 Locations</h2>
+<table>
+<tr><th>Stop</th><th>Address / Coordinates</th></tr>
+<tr><td>🅿️ P+R Mesenich/Wasserbillig</td><td>Park & Ride Wasserbillig/Mesenich — <a href="https://maps.google.com/?q=49.725748,6.490776">49.725748, 6.490776</a></td></tr>
+<tr><td>🅿️ P+R Héienhaff (Airport)</td><td>P+R Héienhaff, Senningerberg, Luxembourg</td></tr>
+<tr><td>🏢 Eurohub Sud</td><td>506 Zone d'Activité Economique Wolser G, 3447 Dudelange</td></tr>
+</table>
+
+<hr>
+<p style="font-size:11px;color:#666"><b>Data sources & validity:</b> Bus 306: RGTR timetable May 2026 (lu-ve). Route timing: Google Maps (May 2026), TomTom Traffic Index 2025, Rome2Rio. Trains: CFL/DB timetable valid 14 Dec 2025 – 12 Dec 2026.</p>
+</div>
+
+<script>
+const stops = [
+  {name:'P+R Mesenich', lat:49.725748, lng:6.490776, icon:'🅿️', type:'start'},
+  {name:'P+R Héienhaff', lat:49.6414, lng:6.2198, icon:'🅿️', type:'mid'},
+  {name:'Eurohub Sud', lat:49.5033, lng:6.1079, icon:'🏢', type:'end'}
+];
+
+// Bus 306 stops with REAL GPS coordinates
+const bus306Stops = [
+  {name:'Trier Theodor-Heuss-Allee', lat:49.75912, lng:6.64713},
+  {name:'Trier Nordallee', lat:49.76024, lng:6.64341},
+  {name:'Trier Bei der Römerbrücke', lat:49.7515, lng:6.6280},
+  {name:'Trier Pacelliufer', lat:49.7443, lng:6.6280},
+  {name:'Trier Messepark P+R', lat:49.7409, lng:6.6220},
+  {name:'Trier-Euren', lat:49.7369, lng:6.6129},
+  {name:'Trier-Zewen, Kantstrasse', lat:49.719743090174724, lng:6.582730815119069},
+  {name:'Igel Kirche', lat:49.7091, lng:6.5525},
+  {name:'Wasserbillig Op der Bréck', lat:49.71438863019534, lng:6.50606193981144},
+  {name:'Wasserbillig Cimetière', lat:49.718254742404035, lng:6.499400605276488},
+  {name:'Mesenich frontière (P+R)', lat:49.725748, lng:6.490776}
+];
+
+// Route waypoints for Bus 306 (follows real streets in Trier, then B49 along Moselle → Igel → Wasserbillig → Mesenich)
+const bus306Route = [
+  [49.75912, 6.64713], // Trier Theodor-Heuss-Allee
+  [49.76024, 6.64341], // Trier Nordallee
+  [49.7616, 6.6331],   // Katharinenufer (along Moselle)
+  [49.7580, 6.6300],   // road south along river
+  [49.7515, 6.6280],   // Trier Bei der Römerbrücke
+  [49.7480, 6.6280],   // south along river
+  [49.7443, 6.6280],   // Trier Pacelliufer
+  [49.7430, 6.6290],   // toward Messepark
+  [49.7409, 6.6220],   // Trier Messepark P+R
+  [49.7398, 6.6190],   // B49 / main road only
+  [49.7385, 6.6160],   // B49 toward Euren
+  [49.7369, 6.6129],   // Trier-Euren (Eisenbahnstraße) on B49
+  [49.7342, 6.6080],   // B49 southbound
+  [49.7315, 6.6020],   // B49 continues along Moselle
+  [49.7282, 6.5955],   // B49 main road
+  [49.7240, 6.5895],   // B49 toward Zewen
+  [49.719743090174724, 6.582730815119069], // Trier-Zewen, Kantstrasse on B49
+  [49.7174, 6.5775],   // B49 main road toward Igel
+  [49.7148, 6.5700],   // B49 continues
+  [49.7118, 6.5610],   // B49 / Moselstrasse approach to Igel
+  [49.7091, 6.5525],   // Igel Kirche
+  [49.7089, 6.5470],   // Moselstrasse / B49 only
+  [49.7089, 6.5410],   // Moselstrasse, stays on main road
+  [49.7094, 6.5350],   // Moselstrasse continues; no river crossing
+  [49.7100, 6.5290],   // Moselstrasse / B49
+  [49.7106, 6.5230],   // Moselstrasse toward Wasserbillig
+  [49.7114, 6.5170],   // Moselstrasse main road
+  [49.712344073119034, 6.512681354860134], // Moselstrasse waypoint provided
+  [49.7133, 6.5090],   // continue on Moselstrasse/B49
+  [49.71438863019534, 6.50606193981144],   // Wasserbillig Op der Bréck
+  [49.7160, 6.5030],   // Wasserbillig town
+  [49.7183, 6.4994],   // Wasserbillig Cimetière
+  [49.7200, 6.4970],   // road north toward Mesenich
+  [49.7220, 6.4940],   // N1 northbound
+  [49.7240, 6.4920],   // continuing on main road
+  [49.725748, 6.490776] // P+R Mesenich
+];
+
+// Bus 302 stops and route (purple) — Trier → Zurlaubener Ufer → Hochschule → Mesenich
+const bus302Stops = [
+  {name:'Trier Theodor-Heuss-Allee', lat:49.75912, lng:6.64713},
+  {name:'Trier Nordallee', lat:49.76024, lng:6.64341},
+  {name:'Trier Zurlaubener Ufer', lat:49.7616, lng:6.6331},
+  {name:'Trier Hochschule', lat:49.7639, lng:6.6342},
+  {name:'Mesenich frontière (P+R)', lat:49.725748, lng:6.490776}
+];
+
+const bus302Route = [
+  [49.75912, 6.64713], // Trier Theodor-Heuss-Allee
+  [49.76024, 6.64341], // Trier Nordallee
+  [49.7616, 6.6331],   // Zurlaubener Ufer
+  [49.7639, 6.6342],   // Trier Hochschule (approx. from Wikidata: 49°45'50"N, 6°38'3"E)
+  [49.7600, 6.6250],   // out of Trier toward westbound corridor
+  [49.7520, 6.6000],   // toward Mesenich corridor
+  [49.7440, 6.5650],   // westbound corridor
+  [49.7380, 6.5350],   // toward Wasserbillig / Mesenich
+  [49.7300, 6.5050],   // approach to Mesenich
+  [49.725748, 6.490776] // P+R Mesenich
+];
+
+// Shuttle route waypoints (follows A1 motorway westbound, then A1/A3 southbound)
+const shuttleRoute = [
+  [49.725748, 6.490776], // P+R Mesenich
+  [49.7200, 6.4750], // exit P+R toward motorway
+  [49.7100, 6.4500], // E44/A1 on-ramp
+  [49.6950, 6.4100], // A1 westbound
+  [49.6850, 6.3700], // A1 continues
+  [49.6750, 6.3300], // A1 Grevenmacher area
+  [49.6650, 6.2900], // A1 toward Luxembourg
+  [49.6550, 6.2600], // A1 approaching Héienhaff
+  [49.6480, 6.2350], // A1 near airport
+  [49.6414, 6.2198], // P+R Héienhaff
+  [49.6380, 6.2100], // exit Héienhaff toward A1 south
+  [49.6300, 6.2050], // merge A1 southbound
+  [49.6200, 6.2000], // A1 south
+  [49.6100, 6.1950], // approaching Croix de Gasperich
+  [49.6000, 6.1850], // junction A1/A3
+  [49.5900, 6.1700], // A3 southbound
+  [49.5800, 6.1550], // A3 continues
+  [49.5650, 6.1400], // A3 toward Dudelange
+  [49.5500, 6.1300], // A3 near Dudelange
+  [49.5300, 6.1200], // A3 exit
+  [49.5150, 6.1130], // approaching Eurohub
+  [49.5033, 6.1079]  // Eurohub Sud
+];
+
+const map = L.map('map').setView([49.65, 6.40], 10);
+
+// Flat map (no relief) - using CartoDB Positron
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{
+  attribution:'© OpenStreetMap contributors, © CARTO',
+  maxZoom: 19
+}).addTo(map);
+
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png'
+});
+
+// Custom icons
+const icons = {
+  start: L.divIcon({className:'',html:'<div style="font-size:24px">🅿️</div>',iconSize:[28,28],iconAnchor:[14,14]}),
+  mid: L.divIcon({className:'',html:'<div style="font-size:24px">✈️</div>',iconSize:[28,28],iconAnchor:[14,14]}),
+  end: L.divIcon({className:'',html:'<div style="font-size:24px">🏢</div>',iconSize:[28,28],iconAnchor:[14,14]}),
+  bus: L.divIcon({className:'',html:'<div style="font-size:14px;background:#f1c40f;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;border:2px solid #d4ac0d">🚏</div>',iconSize:[24,24],iconAnchor:[12,12]}),
+  bus302: L.divIcon({className:'',html:'<div style="font-size:14px;background:#8e44ad;color:#fff;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;border:2px solid #6c3483">🚏</div>',iconSize:[24,24],iconAnchor:[12,12]})
+};
+
+// Add shuttle stops
+stops.forEach(s=>{
+  L.marker([s.lat, s.lng], {icon: icons[s.type]}).addTo(map)
+    .bindPopup(`<b>${s.icon} ${s.name}</b>`)
+    .bindTooltip(s.name, {permanent:true, direction:'top', offset:[0,-12]});
+});
+
+const layers = {morning:[], evening:[], bus306:[], bus302:[]};
+
+// === SHUTTLE ROUTE (GREEN) ===
+const morningLine = L.polyline(shuttleRoute, {color:'#27ae60', weight:5, opacity:0.85});
+layers.morning.push(morningLine);
+morningLine.addTo(map);
+
+// Segment labels
+const labelSeg1 = L.tooltip({permanent:true, direction:'center', className:'route-label', opacity:0.9})
+  .setLatLng([49.6750, 6.3500]).setContent('🚐 ~19 min · 20 km');
+const labelSeg2 = L.tooltip({permanent:true, direction:'center', className:'route-label', opacity:0.9})
+  .setLatLng([49.5600, 6.1450]).setContent('🚐 ~26 min · 26 km');
+layers.morning.push(labelSeg1, labelSeg2);
+labelSeg1.addTo(map);
+labelSeg2.addTo(map);
+
+// Evening route (same path reversed, dashed)
+const eveningRoute = [...shuttleRoute].reverse();
+const eveningLine = L.polyline(eveningRoute, {color:'#1e8449', weight:4, opacity:0.6, dashArray:'10,8'});
+layers.evening.push(eveningLine);
+eveningLine.addTo(map);
+
+const labelE = L.tooltip({permanent:true, direction:'center', className:'route-label', opacity:0.9})
+  .setLatLng([49.5900, 6.2200]).setContent('🌆 Evening ~42 min');
+layers.evening.push(labelE);
+labelE.addTo(map);
+
+// === BUS 306 ROUTE (YELLOW) ===
+const bus306Line = L.polyline(bus306Route, {color:'#f1c40f', weight:5, opacity:0.9, dashArray:null});
+layers.bus306.push(bus306Line);
+bus306Line.addTo(map);
+
+// Add bus stops markers
+bus306Stops.forEach(s=>{
+  const m = L.marker([s.lat, s.lng], {icon: icons.bus})
+    .bindPopup(`<b>🚌 306: ${s.name}</b>`);
+  layers.bus306.push(m);
+  m.addTo(map);
+});
+
+const labelBus = L.tooltip({permanent:true, direction:'center', className:'route-label', opacity:0.9})
+  .setLatLng([49.7300, 6.5500]).setContent('🚌 306 · ~30 min');
+layers.bus306.push(labelBus);
+labelBus.addTo(map);
+
+// === BUS 302 ROUTE (PURPLE) ===
+const bus302Line = L.polyline(bus302Route, {color:'#8e44ad', weight:5, opacity:0.9, dashArray:null});
+layers.bus302.push(bus302Line);
+bus302Line.addTo(map);
+
+bus302Stops.forEach(s=>{
+  const m = L.marker([s.lat, s.lng], {icon: icons.bus302})
+    .bindPopup(`<b>🚌 302: ${s.name}</b>`);
+  layers.bus302.push(m);
+  m.addTo(map);
+});
+
+const labelBus302 = L.tooltip({permanent:true, direction:'center', className:'route-label', opacity:0.9})
+  .setLatLng([49.7480, 6.5750]).setContent('🚌 302 · ~22 min');
+layers.bus302.push(labelBus302);
+labelBus302.addTo(map);
+
+function toggle(el){
+  const g = el.dataset.group;
+  layers[g].forEach(l=>{ if(el.checked) l.addTo(map); else map.removeLayer(l); });
+}
+
+// Fit bounds to show everything
+const allCoords = [...shuttleRoute, ...bus306Route, ...bus302Route];
+map.fitBounds(L.latLngBounds(allCoords).pad(0.08));
+</script>
+<script>
+// ===== INTERACTIVE SCHEDULE CALCULATOR =====
+const bus306Morning = [
+  {course:'3161', depTrier:'06:00', depNordallee:'06:01', depRoemer:'06:04', depPacelliufer:'06:06', depMessepark:'06:08', depEuren:'06:10', depZewen:'06:14', depIgel:'06:17', arrMesenich:'06:28'},
+  {course:'3341', depTrier:'06:30', depNordallee:'06:31', depRoemer:'06:34', depPacelliufer:'06:36', depMessepark:'06:38', depEuren:'06:40', depZewen:'06:44', depIgel:'06:47', arrMesenich:'06:58'},
+  {course:'3521', depTrier:'07:00', depNordallee:'07:01', depRoemer:'07:05', depPacelliufer:'07:06', depMessepark:'07:08', depEuren:'07:10', depZewen:'07:14', depIgel:'07:18', arrMesenich:'07:30'},
+  {course:'3701', depTrier:'07:30', depNordallee:'07:31', depRoemer:'07:35', depPacelliufer:'07:36', depMessepark:'07:38', depEuren:'07:40', depZewen:'07:44', depIgel:'07:48', arrMesenich:'08:00'},
+  {course:'3881', depTrier:'08:00', depNordallee:'08:01', depRoemer:'08:05', depPacelliufer:'08:06', depMessepark:'08:08', depEuren:'08:10', depZewen:'08:14', depIgel:'08:18', arrMesenich:'08:30'},
+];
+
+const bus306Evening = [
+  {course:'6760', depMesenich:'17:01', arrIgel:'17:11', arrMessepark:'17:19', arrTrier:'17:29'},
+  {course:'6940', depMesenich:'17:31', arrIgel:'17:41', arrMessepark:'17:49', arrTrier:'17:59'},
+  {course:'7120', depMesenich:'18:01', arrIgel:'18:11', arrMessepark:'18:19', arrTrier:'18:29'},
+  {course:'7300', depMesenich:'18:31', arrIgel:'18:41', arrMessepark:'18:49', arrTrier:'18:59'},
+  {course:'7480', depMesenich:'19:01', arrIgel:'19:11', arrMessepark:'19:19', arrTrier:'19:29'},
+  {course:'7660', depMesenich:'19:31', arrIgel:'19:41', arrMessepark:'19:49', arrTrier:'19:59'},
+];
+
+const bus302Morning = [
+  {course:'3250', depTrier:'06:15', depNordallee:'06:16', depZurlaubener:'06:17', depHochschule:'06:19', arrMesenich:'06:33'},
+  {course:'3430', depTrier:'06:45', depNordallee:'06:46', depZurlaubener:'06:49', depHochschule:'06:52', arrMesenich:'07:07'},
+  {course:'3610', depTrier:'07:15', depNordallee:'07:16', depZurlaubener:'07:19', depHochschule:'07:22', arrMesenich:'07:37'},
+  {course:'3790', depTrier:'07:45', depNordallee:'07:46', depZurlaubener:'07:49', depHochschule:'07:52', arrMesenich:'08:07'},
+  {course:'3970', depTrier:'08:15', depNordallee:'08:16', depZurlaubener:'08:19', depHochschule:'08:22', arrMesenich:'08:37'},
+];
+
+const bus302Evening = [
+  {course:'6851', depMesenich:'16:57', arrHochschule:'17:11', arrZurlaubener:'17:15', arrNordallee:'17:18', arrTrier:'17:20'},
+  {course:'7031', depMesenich:'17:27', arrHochschule:'17:41', arrZurlaubener:'17:45', arrNordallee:'17:48', arrTrier:'17:50'},
+  {course:'7211', depMesenich:'17:57', arrHochschule:'18:11', arrZurlaubener:'18:15', arrNordallee:'18:18', arrTrier:'18:20'},
+  {course:'7391', depMesenich:'18:27', arrHochschule:'18:41', arrZurlaubener:'18:45', arrNordallee:'18:48', arrTrier:'18:50'},
+  {course:'7571', depMesenich:'18:57', arrHochschule:'19:11', arrZurlaubener:'19:15', arrNordallee:'19:18', arrTrier:'19:20'},
+  {course:'7751', depMesenich:'19:22', arrHochschule:'19:34', arrZurlaubener:'19:37', arrNordallee:'19:38', arrTrier:'19:40'},
+  {course:'7931', depMesenich:'19:52', arrHochschule:'20:04', arrZurlaubener:'20:07', arrNordallee:'20:08', arrTrier:'20:10'},
+];
+
+const routeConfigs = {
+  '306': {line:'306', name:'Bus 306', directionMorning:'Trier (D) → Cloche d\'Or → Esch/Belval', defaultCourse:'3521', morning:bus306Morning, evening:bus306Evening},
+  '302': {line:'302', name:'Bus 302', directionMorning:'Trier (D) → PE Howald', defaultCourse:'3610', morning:bus302Morning, evening:bus302Evening}
+};
+
+// Shuttle timing constants
+const BUFFER_BUS_TO_SHUTTLE = 5;
+const MESENICH_TO_HEIENHAF = 19;
+const HEIENHAF_STOP = 3;
+const HEIENHAF_TO_EUROHUB = 26;
+const WORK_DURATION = 535; // 8h55 incl. 1h lunch
+const EUROHUB_TO_HEIENHAF_EVE = 22;
+const HEIENHAF_STOP_EVE = 3;
+const HEIENHAF_TO_MESENICH_EVE = 17;
+
+function toMin(t){ const [h,m]=t.split(':').map(Number); return h*60+m; }
+function toTime(mins){ return String(Math.floor(mins/60)).padStart(2,'0') + ':' + String(mins%60).padStart(2,'0'); }
+function fmtDur(mins){ return `${Math.floor(mins/60)}h${String(mins%60).padStart(2,'0')}`; }
+
+function populateBusSelect(){
+  const routeId = document.getElementById('routeSelect')?.value || '306';
+  const cfg = routeConfigs[routeId];
+  const select = document.getElementById('busSelect');
+  if(!select || !cfg) return;
+  select.innerHTML = cfg.morning.map(b => {
+    const rec = b.course === cfg.defaultCourse ? ' ⭐ recommended' : '';
+    return `<option value="${b.course}" ${b.course === cfg.defaultCourse ? 'selected' : ''}>${b.depTrier} from Trier → arr. Mesenich ${b.arrMesenich}${rec}</option>`;
+  }).join('');
+}
+
+function renderMorningBusRows(routeId, bus){
+  if(routeId === '302'){
+    return `<tr><td>🚏 Trier Theodor-Heuss-Allee</td><td><b>${bus.depTrier}</b></td><td>First Trier stop</td></tr>
+    <tr><td>🚏 Trier Nordallee</td><td>${bus.depNordallee}</td><td></td></tr>
+    <tr><td>🚏 Trier Zurlaubener Ufer</td><td>${bus.depZurlaubener}</td><td></td></tr>
+    <tr><td>🚏 Trier Hochschule</td><td>${bus.depHochschule}</td><td></td></tr>`;
+  }
+  return `<tr><td>🚏 Trier Theodor-Heuss-Allee</td><td><b>${bus.depTrier}</b></td><td>First Trier stop</td></tr>
+  <tr><td>🚏 Trier Nordallee</td><td>${bus.depNordallee}</td><td></td></tr>
+  <tr><td>🚏 Trier Bei der Römerbrücke</td><td>${bus.depRoemer}</td><td></td></tr>
+  <tr><td>🚏 Trier Pacelliufer</td><td>${bus.depPacelliufer}</td><td></td></tr>
+  <tr><td>🚏 Trier Messepark P&R</td><td>${bus.depMessepark}</td><td>Park & Ride option</td></tr>
+  <tr><td>🚏 Trier-Euren</td><td>${bus.depEuren}</td><td></td></tr>
+  <tr><td>🚏 Trier-Zewen</td><td>${bus.depZewen}</td><td></td></tr>
+  <tr><td>🚏 Igel Kirche</td><td><b>${bus.depIgel}</b></td><td>📍 Igel residents board here</td></tr>`;
+}
+
+function renderEveningTable(routeId, cfg, bestEveBus, backupEveBus, mesenichArrMin){
+  let html = routeId === '302'
+    ? `<table><tr><th>Course</th><th>Dep. Mesenich</th><th>Arr. Hochschule</th><th>Arr. Zurlaubener Ufer</th><th>Arr. Nordallee</th><th>Arr. Trier</th><th>Buffer</th><th>Status</th></tr>`
+    : `<table><tr><th>Course</th><th>Dep. Mesenich</th><th>Arr. Igel</th><th>Arr. Messepark P&R</th><th>Arr. Trier</th><th>Buffer</th><th>Status</th></tr>`;
+  cfg.evening.forEach(eb => {
+    const depMin = toMin(eb.depMesenich);
+    const buffer = depMin - mesenichArrMin;
+    let status, cls;
+    if(buffer < 0){ status = '❌ Already departed'; cls = 'style="opacity:0.4"'; }
+    else if(buffer < 3){ status = '⚠️ Too tight'; cls = 'style="opacity:0.5;color:#e67e22"'; }
+    else if(eb === bestEveBus){ status = '⭐ Best option'; cls = 'class="highlight"'; }
+    else if(eb === backupEveBus){ status = '✅ Backup'; cls = ''; }
+    else { status = '✅ Available'; cls = ''; }
+    if(routeId === '302'){
+      html += `<tr ${cls}><td>${eb.course}</td><td>${eb.depMesenich}</td><td>${eb.arrHochschule}</td><td>${eb.arrZurlaubener}</td><td>${eb.arrNordallee}</td><td>${eb.arrTrier}</td><td>${buffer >= 0 ? buffer + ' min' : '—'}</td><td>${status}</td></tr>`;
+    } else {
+      html += `<tr ${cls}><td>${eb.course}</td><td>${eb.depMesenich}</td><td>${eb.arrIgel}</td><td>${eb.arrMessepark}</td><td>${eb.arrTrier}</td><td>${buffer >= 0 ? buffer + ' min' : '—'}</td><td>${status}</td></tr>`;
+    }
+  });
+  return html + `</table>`;
+}
+
+function updateSchedule(){
+  const routeId = document.getElementById('routeSelect')?.value || '306';
+  const cfg = routeConfigs[routeId];
+  const selectedCourse = document.getElementById('busSelect')?.value || cfg.defaultCourse;
+  const bus = cfg.morning.find(b => b.course === selectedCourse) || cfg.morning.find(b => b.course === cfg.defaultCourse);
+  if(!bus) return;
+
+  const busArrMesenich = toMin(bus.arrMesenich);
+  const shuttleDepMesenich = busArrMesenich + BUFFER_BUS_TO_SHUTTLE;
+  const shuttleArrHeienhaf = shuttleDepMesenich + MESENICH_TO_HEIENHAF;
+  const shuttleDepHeienhaf = shuttleArrHeienhaf + HEIENHAF_STOP;
+  const shuttleArrEurohub = shuttleDepHeienhaf + HEIENHAF_TO_EUROHUB;
+  const workStart = shuttleArrEurohub + 2;
+  const workEnd = workStart + WORK_DURATION;
+
+  const shuttleDepEurohub = workEnd + 5;
+  const shuttleArrHeienhafEve = shuttleDepEurohub + EUROHUB_TO_HEIENHAF_EVE;
+  const shuttleDepHeienhafEve = shuttleArrHeienhafEve + HEIENHAF_STOP_EVE;
+  const shuttleArrMesenichEve = shuttleDepHeienhafEve + HEIENHAF_TO_MESENICH_EVE;
+
+  let bestEveBus = null, backupEveBus = null;
+  for(const eb of cfg.evening){
+    if(toMin(eb.depMesenich) >= shuttleArrMesenichEve + 3){
+      if(!bestEveBus) bestEveBus = eb;
+      else if(!backupEveBus) backupEveBus = eb;
+    }
+  }
+
+  let html = '';
+  html += `<h3>🚌 ${cfg.name} — Course ${bus.course} (your selected bus)</h3>`;
+  html += `<p>Direction: ${cfg.directionMorning}. ÷ = pick-up only (German stops). Source: RGTR Line ${cfg.line}, May 2026.</p>`;
+  html += `<table><tr><th>Stop</th><th>Time</th><th>Notes</th></tr>${renderMorningBusRows(routeId, bus)}<tr class="highlight"><td>🏁 Mesenich frontière</td><td><b>${bus.arrMesenich}</b></td><td>Exit here → P+R</td></tr></table>`;
+
+  html += `<h3>🚐 Shuttle Schedule (Morning)</h3>`;
+  html += `<table>
+  <tr><th>Time</th><th>Event</th><th>Duration</th></tr>
+  <tr><td>${bus.arrMesenich}</td><td>🚌 ${cfg.name} arrives Mesenich frontière</td><td></td></tr>
+  <tr class="highlight"><td><b>${toTime(shuttleDepMesenich)}</b></td><td><b>🚐 Shuttle departs P+R Mesenich</b></td><td>+${BUFFER_BUS_TO_SHUTTLE} min buffer</td></tr>
+  <tr><td>${toTime(shuttleArrHeienhaf)}</td><td>🚐 Shuttle arrives P+R Héienhaff</td><td>${MESENICH_TO_HEIENHAF} min (A1)</td></tr>
+  <tr><td>${toTime(shuttleDepHeienhaf)}</td><td>🚐 Shuttle departs P+R Héienhaff</td><td>${HEIENHAF_STOP} min stop</td></tr>
+  <tr><td>${toTime(shuttleArrEurohub)}</td><td>🚐 Shuttle arrives Eurohub Sud</td><td>${HEIENHAF_TO_EUROHUB} min (A1/A3)</td></tr>
+  <tr class="highlight"><td><b>${toTime(workStart)}</b></td><td><b>💼 Work starts</b></td><td></td></tr>
+  </table>`;
+
+  html += `<div class="info-box" style="font-size:13px"><b>Traffic Details:</b><br>
+  <table style="font-size:12px"><tr><th>Segment</th><th>Distance</th><th>Best</th><th>Avg</th><th>Worst</th></tr>
+  <tr><td>Mesenich → Héienhaff (A1)</td><td>~20 km</td><td>16 min</td><td>19 min</td><td>25 min</td></tr>
+  <tr><td>Héienhaff → Eurohub (A1/A3)</td><td>~26 km</td><td>20 min</td><td>26 min</td><td>35 min</td></tr>
+  <tr style="font-weight:bold"><td>Total</td><td>~46 km</td><td>36 min</td><td>48 min</td><td>60 min</td></tr></table>
+  <em>Source: Google Maps (May 2026) + TomTom 2025. Both shuttle segments are counter-commute direction.</em></div>`;
+
+  html += `<h2>🌆 Evening Schedule</h2>`;
+  html += `<table>
+  <tr><th>Time</th><th>Event</th><th>Duration</th></tr>
+  <tr class="highlight"><td><b>${toTime(workEnd)}</b></td><td><b>💼 Work ends</b></td><td>8h55 (incl. 1h lunch)</td></tr>
+  <tr><td>${toTime(shuttleDepEurohub)}</td><td>🚐 Shuttle departs Eurohub Sud</td><td>+5 min</td></tr>
+  <tr><td>${toTime(shuttleArrHeienhafEve)}</td><td>🚐 Shuttle arrives P+R Héienhaff</td><td>${EUROHUB_TO_HEIENHAF_EVE} min</td></tr>
+  <tr><td>${toTime(shuttleDepHeienhafEve)}</td><td>🚐 Shuttle departs P+R Héienhaff</td><td>${HEIENHAF_STOP_EVE} min stop</td></tr>
+  <tr class="highlight"><td><b>${toTime(shuttleArrMesenichEve)}</b></td><td><b>🚐 Shuttle arrives P+R Mesenich</b></td><td>${HEIENHAF_TO_MESENICH_EVE} min</td></tr>
+  </table>`;
+
+  html += `<h3>🚌 ${cfg.name} back to Trier</h3>`;
+  html += `<p>Direction: Luxembourg → Trier. ý = drop-off only in Germany (you CAN exit in Trier).</p>`;
+  html += renderEveningTable(routeId, cfg, bestEveBus, backupEveBus, shuttleArrMesenichEve);
+
+  if(bestEveBus){
+    const homeLine = routeId === '302'
+      ? `→ <b>Hochschule: ${bestEveBus.arrHochschule}</b> | <b>Nordallee: ${bestEveBus.arrNordallee}</b> | <b>Trier Christophstr: ${bestEveBus.arrTrier}</b>`
+      : `→ <b>Igel: ${bestEveBus.arrIgel}</b> | <b>Trier Messepark: ${bestEveBus.arrMessepark}</b> | <b>Trier Christophstr: ${bestEveBus.arrTrier}</b>`;
+    html += `<div class="info-box"><b>🏠 Home arrival estimate:</b><br>Work ends <b>${toTime(workEnd)}</b> → Shuttle → ${cfg.name} (${bestEveBus.course}, dep. ${bestEveBus.depMesenich})<br>${homeLine}</div>`;
+  }
+
+  const totalMorning = shuttleArrEurohub - toMin(bus.depTrier);
+  const homeArr = bestEveBus ? toMin(bestEveBus.arrTrier) : shuttleArrMesenichEve;
+  const totalReturn = homeArr - shuttleDepEurohub;
+  const totalReturnFromWorkEnd = homeArr - workEnd;
+  const returnShuttleOnly = shuttleArrMesenichEve - shuttleDepEurohub;
+  const totalDay = homeArr - toMin(bus.depTrier);
+
+  html += `<h3>📊 Day Summary</h3><table>
+  <tr><th>Metric</th><th>Value</th></tr>
+  <tr><td>🚌 Leave Trier (${cfg.name})</td><td><b>${bus.depTrier}</b></td></tr>
+  <tr><td>🏢 Arrive Eurohub</td><td><b>${toTime(shuttleArrEurohub)}</b></td></tr>
+  <tr><td>⏱️ Trier → Eurohub total (morning)</td><td><b>${totalMorning} min</b> (${fmtDur(totalMorning)}) — ${cfg.name} + 5 min buffer + shuttle</td></tr>
+  <tr><td>🚐 Shuttle only (P+R Mesenich → Eurohub)</td><td><b>${shuttleArrEurohub - shuttleDepMesenich} min</b> (${toTime(shuttleDepMesenich)} – ${toTime(shuttleArrEurohub)})</td></tr>
+  <tr><td>💼 Work hours</td><td>${toTime(workStart)} – ${toTime(workEnd)} (8h55)</td></tr>
+  <tr><td>🏠 Arrive home (Trier)</td><td><b>${bestEveBus ? bestEveBus.arrTrier : toTime(shuttleArrMesenichEve) + ' (Mesenich)'}</b></td></tr>
+  <tr><td>⏱️ Eurohub → Trier total (return)</td><td><b>${totalReturn} min</b> (${fmtDur(totalReturn)}) — shuttle + wait at Mesenich + ${cfg.name}</td></tr>
+  <tr><td>🚐 Return shuttle only (Eurohub → P+R Mesenich)</td><td><b>${returnShuttleOnly} min</b> (${toTime(shuttleDepEurohub)} – ${toTime(shuttleArrMesenichEve)})</td></tr>
+  <tr><td>🕐 Work end → home</td><td><b>${totalReturnFromWorkEnd} min</b> (${toTime(workEnd)} – ${bestEveBus ? bestEveBus.arrTrier : toTime(shuttleArrMesenichEve)}) incl. 5 min departure buffer</td></tr>
+  <tr class="highlight"><td><b>🕐 Total day (door to door)</b></td><td><b>${fmtDur(totalDay)}</b> (${bus.depTrier} – ${bestEveBus ? bestEveBus.arrTrier : '?'})</td></tr>
+  </table>`;
+
+  document.getElementById('schedule-output').innerHTML = html;
+}
+
+document.addEventListener('DOMContentLoaded', ()=>{ populateBusSelect(); updateSchedule(); });
+window.onload = ()=>{ populateBusSelect(); updateSchedule(); };
+</script>
+</body>
+</html>
